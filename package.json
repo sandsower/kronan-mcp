@@ -1,18 +1,45 @@
 {
   "name": "kronan-mcp",
   "version": "1.0.0",
-  "description": "MCP server for the Krónan grocery store API",
+  "description": "MCP server for the Krónan grocery store API (Iceland)",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "kronan-mcp": "dist/index.js"
   },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "!dist/__tests__",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "kronan",
+    "iceland",
+    "grocery",
+    "model-context-protocol",
+    "claude",
+    "ai"
+  ],
+  "author": "Vic Valenzuela",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sandsower/kronan-mcp.git"
+  },
+  "homepage": "https://github.com/sandsower/kronan-mcp",
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
