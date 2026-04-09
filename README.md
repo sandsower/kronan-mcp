@@ -16,17 +16,16 @@ MCP server for the [Krónan](https://kronan.is) grocery store API. Claude can br
 | Purchase stats | `list_purchase_stats`, `set_purchase_stat_ignored` |
 | Account | `get_me` |
 
-## Setup
+## Install
 
 ```bash
-npm install && npm run build
+npm install -g kronan-mcp
 ```
 
-Copy the example env file and add your token:
+Or run directly with npx (no install needed):
 
 ```bash
-cp .env.example .env
-# Edit .env with your Krónan access token
+npx kronan-mcp
 ```
 
 ### Getting a token
@@ -41,8 +40,8 @@ Add to your project's `.claude/settings.local.json` or global `~/.claude/setting
 {
   "mcpServers": {
     "kronan": {
-      "command": "node",
-      "args": ["/path/to/kronan-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["kronan-mcp"],
       "env": {
         "KRONAN_ACCESS_TOKEN": "act_your_token_here"
       }
@@ -82,9 +81,10 @@ Full OpenAPI schema at `openapi-schema.yaml`.
 ## Development
 
 ```bash
-npm run dev          # Watch mode (recompiles on change)
-npm test             # Run tests
-npm run test:watch   # Watch mode tests
+npm install && npm run build   # Build from source
+npm run dev                    # Watch mode (recompiles on change)
+npm test                       # Run tests
+npm run test:watch             # Watch mode tests
 ```
 
 ## Tests
