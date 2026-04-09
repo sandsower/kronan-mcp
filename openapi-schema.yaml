@@ -1,0 +1,2086 @@
+openapi: 3.0.3
+info:
+  title: Kronan Public API
+  version: 1.0.0
+  description: |
+    Public API for Kronan SmartStore.
+
+    This API is designed for external systems, mobile apps, and third-party integrations to interact with the Kronan e-commerce platform.
+
+    This API is in BETA and in active development.
+
+    ## Authentication
+    All endpoints require an `AccessToken` header: `Authorization: AccessToken <token>`.
+    Tokens are scoped to a user or a customer group.
+
+    Only Users with login type Audkenni can create access tokens.
+
+    Access tokens can be created in settings in User or Customer group pages.
+
+    ## Available resources
+    - **Me** — Current authenticated identity (user or customer group)
+    - **Products** — Browse products, search in smart store product selection, view details
+    - **Categories** — Category tree and paginated product listings
+    - **Orders** — Order history, details, and line modifications
+    - **Checkout** — Smart checkout with line management
+    - **Shopping Notes** — Freeform shopping lists with product linking. Used in Scan and Go
+    Note: App does not support SKUs in notes yet.
+    - **Product Lists** — Saved product collections
+    - **Purchase Stats** — Personal purchase history and frequency data
+
+    ## Coming soon
+    - Delivery slot browsing and reservation
+    - Address management
+    - Payment initiation with gift cards as we can't integrate with 3DS programmatically
+    - Special search for shopping notes to be able to search for all products in certain stores
+
+    ## Rate limiting
+    All endpoints are rate limited to 200 requests per 200 seconds per user. Exceeding the limit returns `429 Too Many Requests`.
+
+    ## Conventions
+    - All monetary values are integers (ISK, no decimals)
+    - Timestamps are ISO-8601 UTC with trailing `Z`
+    - Empty arrays return `[]`, never `null`
+    - Paginated endpoints use `limit`/`offset` parameters
+    - Response field names are `camelCase`
+paths:
+  /api/v1/categories/:
+    get:
+      operationId: categories_list
+      description: Returns the full category tree (3 levels).
+      summary: List categories
+      tags:
+      - categories
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicCategory'
+          description: ''
+  /api/v1/categories/{slug}/products/:
+    get:
+      operationId: categories_products_retrieve
+      description: Returns a paginated product listing for a category (48 products
+        per page).
+      summary: Get category products
+      parameters:
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: 'Page number (default: 1)'
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - categories
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicCategoryProductList'
+          description: ''
+  /api/v1/checkout/:
+    get:
+      operationId: checkout_list
+      description: Returns the active smart checkout for the authenticated user or
+        customer group. A checkout is auto-created if none exists.
+      summary: Get active checkout
+      tags:
+      - checkout
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicCheckout'
+          description: ''
+  /api/v1/checkout/lines/:
+    post:
+      operationId: checkout_lines_create
+      description: 'Add product lines to the active checkout. Set `replace: true`
+        to replace all existing lines. Each line requires a SKU and quantity. Products
+        are validated for availability'
+      summary: Add or replace checkout lines
+      tags:
+      - checkout
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublicLinesAddInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublicLinesAddInput'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicLinesAddInput'
+        required: true
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicCheckout'
+          description: ''
+  /api/v1/me/:
+    get:
+      operationId: me_list
+      description: Returns the identity behind the access token. `type` is either
+        `user` or `customer_group`. `name` is the user's full name or the customer
+        group name.
+      summary: Get current identity
+      tags:
+      - me
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicMe'
+          description: ''
+  /api/v1/orders/:
+    get:
+      operationId: orders_list
+      description: Returns a paginated list of orders ordered by most recent first.
+      summary: List orders
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      - in: query
+        name: type
+        schema:
+          type: string
+        description: 'Filter by order type: delivery, pickup, scan_n_go, digital'
+      tags:
+      - orders
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPublicOrderListResponseList'
+          description: ''
+  /api/v1/orders/{token}/:
+    get:
+      operationId: orders_retrieve
+      description: Returns full order details including lines with product thumbnails.
+      summary: Get order details
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - orders
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicOrder'
+          description: ''
+  /api/v1/orders/{token}/delete-lines/:
+    post:
+      operationId: orders_delete_lines_create
+      description: Remove specific lines from an order by their IDs. Service lines
+        and the last remaining line cannot be deleted. Lines where picking has started
+        are also protected. Returns the updated order.
+      summary: Delete order lines
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - orders
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublicLinesDeleteInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublicLinesDeleteInput'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicLinesDeleteInput'
+        required: true
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicOrder'
+          description: ''
+  /api/v1/orders/{token}/lines-toggle-substitution/:
+    post:
+      operationId: orders_lines_toggle_substitution_create
+      description: Toggle whether substitution is allowed for specific order lines.
+        Only works on orders where modifications are still allowed. Returns the updated
+        order.
+      summary: Toggle substitution on order lines
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - orders
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublicLinesToggleSubstitutionInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublicLinesToggleSubstitutionInput'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicLinesToggleSubstitutionInput'
+        required: true
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicOrder'
+          description: ''
+  /api/v1/orders/{token}/lower-quantity-lines/:
+    post:
+      operationId: orders_lower_quantity_lines_create
+      description: Reduce the quantity of specific order lines. Quantity can only
+        be lowered, not increased. Set to 0 to remove the line. Lines where picking
+        has started cannot be modified. Returns the updated order.
+      summary: Lower quantity on order lines
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - orders
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublicLinesLowerQuantityInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublicLinesLowerQuantityInput'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicLinesLowerQuantityInput'
+        required: true
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicOrder'
+          description: ''
+  /api/v1/product-lists/:
+    get:
+      operationId: product_lists_list
+      description: Returns a paginated list of product lists owned by the authenticated
+        user or customer group.
+      summary: List product lists
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      tags:
+      - product-lists
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPublicProductListListResponseList'
+          description: ''
+    post:
+      operationId: product_lists_create
+      description: Create a new product list with an optional name and description.
+      summary: Create product list
+      tags:
+      - product-lists
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublicProductListCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublicProductListCreate'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicProductListCreate'
+        required: true
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProductList'
+          description: ''
+  /api/v1/product-lists/{token}/:
+    get:
+      operationId: product_lists_retrieve
+      description: Returns a product list with all items including product details,
+        pricing, discounts.
+      summary: Get product list details
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - product-lists
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProductListDetail'
+          description: ''
+    patch:
+      operationId: product_lists_partial_update
+      description: Update the name or description of a product list.
+      summary: Update product list
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - product-lists
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicProductListCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicProductListCreate'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicProductListCreate'
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProductList'
+          description: ''
+    delete:
+      operationId: product_lists_destroy
+      description: Permanently delete a product list and all its items.
+      summary: Delete product list
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - product-lists
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/product-lists/{token}/delete-all-items/:
+    delete:
+      operationId: product_lists_delete_all_items_destroy
+      description: Remove all items from a product list without deleting the list
+        itself.
+      summary: Delete all items from product list
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - product-lists
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/product-lists/{token}/sort-items/:
+    post:
+      operationId: product_lists_sort_items_create
+      description: Sort items in the product list by store departments. Returns the
+        updated list.
+      summary: Sort product list items
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - product-lists
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublicProductList'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublicProductList'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicProductList'
+        required: true
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProductListDetail'
+          description: ''
+  /api/v1/product-lists/{token}/update-item/:
+    post:
+      operationId: product_lists_update_item_create
+      description: Add a product by SKU or update its quantity. Set quantity to 0
+        to remove the item. Returns the updated list with full product details.
+      summary: Add or update item in product list
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - product-lists
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublicProductListAddItemInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublicProductListAddItemInput'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicProductListAddItemInput'
+        required: true
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProductListDetail'
+          description: ''
+  /api/v1/product-purchase-stats/:
+    get:
+      operationId: product_purchase_stats_list
+      description: Returns a paginated list of products the user or customer group
+        has previously purchased, ordered by most recent purchase date. Ignored products
+        are excluded by default.
+      summary: List purchase history
+      parameters:
+      - in: query
+        name: include_ignored
+        schema:
+          type: boolean
+        description: Set to true to include ignored products in the results.
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      tags:
+      - product-purchase-stats
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPublicProductPurchaseStatsListResponseList'
+          description: ''
+  /api/v1/product-purchase-stats/{id}/set-ignored/:
+    patch:
+      operationId: product_purchase_stats_set_ignored_partial_update
+      description: Set whether a product is hidden from purchase history. Ignored
+        products will not appear in the default list.
+      summary: Set ignored status
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this product purchase stats
+          v2.
+        required: true
+      tags:
+      - product-purchase-stats
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicToggleIgnoredInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicToggleIgnoredInput'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicToggleIgnoredInput'
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProductPurchaseStats'
+          description: ''
+  /api/v1/products/{sku}/:
+    get:
+      operationId: products_retrieve
+      description: Returns full product details including price, discounts, tags,
+        availability.
+      summary: Get product details
+      parameters:
+      - in: path
+        name: sku
+        schema:
+          type: string
+        description: Product SKU
+        required: true
+      tags:
+      - products
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProductDetail'
+          description: ''
+  /api/v1/products/search/:
+    post:
+      operationId: products_search_create
+      description: 'Search for products with pagination and sorting. Only returns
+        products in the smart store product selection that are available for home
+        delivery. Set `with_detail: true` for enriched results including discounts
+        and tags.'
+      summary: Search products
+      tags:
+      - products
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublicSearchInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublicSearchInput'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicSearchInput'
+        required: true
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicPaginatedSearchResult'
+          description: ''
+  /api/v1/schema/:
+    get:
+      operationId: schema_retrieve
+      description: |-
+        OpenApi3 schema for this API. Format can be selected via content negotiation.
+
+        - YAML: application/vnd.oai.openapi
+        - JSON: application/vnd.oai.openapi+json
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - json
+          - yaml
+      - in: query
+        name: lang
+        schema:
+          type: string
+          enum:
+          - de
+          - en
+          - is
+          - nb
+          - sv
+      tags:
+      - schema
+      security:
+      - AccessTokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/vnd.oai.openapi:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/yaml:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/vnd.oai.openapi+json:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/shopping-notes/:
+    get:
+      operationId: shopping_notes_list
+      description: Returns the shopping note for the authenticated user or customer
+        group. Auto-creates one if none exists.
+      summary: Get shopping note
+      tags:
+      - shopping-notes
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicShoppingNote'
+          description: ''
+  /api/v1/shopping-notes/add-line/:
+    post:
+      operationId: shopping_notes_add_line_create
+      description: Add a new line to the shopping note. Provide either a `text` (freeform
+        item) or a `sku` (linked product), with an optional quantity.
+      summary: Add line to shopping note
+      tags:
+      - shopping-notes
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublicShoppingNoteLineInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublicShoppingNoteLineInput'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicShoppingNoteLineInput'
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicShoppingNote'
+          description: ''
+  /api/v1/shopping-notes/change-line/:
+    patch:
+      operationId: shopping_notes_change_line_partial_update
+      description: Update the text or quantity of an existing shopping note line.
+      summary: Change shopping note line
+      tags:
+      - shopping-notes
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicShoppingNoteLineChangeInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicShoppingNoteLineChangeInput'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicShoppingNoteLineChangeInput'
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicShoppingNote'
+          description: ''
+  /api/v1/shopping-notes/change-placement/:
+    patch:
+      operationId: shopping_notes_change_placement_partial_update
+      description: Change the display order of lines by passing their tokens in the
+        desired order via `lines_tokens` query parameter.
+      summary: Reorder shopping note lines
+      parameters:
+      - in: query
+        name: lines_tokens
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+        required: true
+        explode: true
+      tags:
+      - shopping-notes
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicShoppingNote'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicShoppingNote'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicShoppingNote'
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicShoppingNote'
+          description: ''
+  /api/v1/shopping-notes/delete-line/:
+    delete:
+      operationId: shopping_notes_delete_line_destroy
+      description: Remove a line from the shopping note by its token.
+      summary: Delete shopping note line
+      parameters:
+      - in: query
+        name: token
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - shopping-notes
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/shopping-notes/delete-line-archived/:
+    delete:
+      operationId: shopping_notes_delete_line_archived_destroy
+      description: Remove a specific archived line by its token. Returns the remaining
+        archived lines.
+      summary: Delete archived line
+      parameters:
+      - in: query
+        name: token
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - shopping-notes
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/shopping-notes/delete-shopping-note/:
+    delete:
+      operationId: shopping_notes_delete_shopping_note_destroy
+      description: Delete all lines from the shopping note (the note itself is preserved).
+      summary: Clear shopping note
+      tags:
+      - shopping-notes
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/shopping-notes/is-eligible-for-store-product-order/:
+    get:
+      operationId: shopping_notes_is_eligible_for_store_product_order_retrieve
+      description: Check if the shopping note contains products that can be ordered
+        from a store. Returns 204 if eligible, 404 if no matching products found.
+      summary: Check store product order eligibility
+      tags:
+      - shopping-notes
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '204':
+          description: No response body
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicShoppingNoteEligibilityError'
+          description: ''
+  /api/v1/shopping-notes/lines-archived/:
+    get:
+      operationId: shopping_notes_lines_archived_list
+      description: Returns previously completed and archived shopping note lines.
+      summary: List archived lines
+      tags:
+      - shopping-notes
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicShoppingNoteLineArchived'
+          description: ''
+  /api/v1/shopping-notes/store-product-order/:
+    post:
+      operationId: shopping_notes_store_product_order_create
+      description: Reorder shopping note lines to match the store's product aisle
+        layout for efficient in-store shopping.
+      summary: Apply store product order
+      tags:
+      - shopping-notes
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PublicShoppingNote'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PublicShoppingNote'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicShoppingNote'
+        required: true
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicShoppingNote'
+          description: ''
+  /api/v1/shopping-notes/toggle-complete-on-line/:
+    patch:
+      operationId: shopping_notes_toggle_complete_on_line_partial_update
+      description: Mark a shopping note line as completed or uncompleted.
+      summary: Toggle line completion
+      tags:
+      - shopping-notes
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicShoppingNoteLineTokenInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicShoppingNoteLineTokenInput'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPublicShoppingNoteLineTokenInput'
+      security:
+      - AccessTokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicShoppingNote'
+          description: ''
+components:
+  schemas:
+    BlankEnum:
+      enum:
+      - ''
+    NullEnum:
+      enum:
+      - null
+    OrderStatusEnum:
+      enum:
+      - draft
+      - unfulfilled
+      - partially fulfilled
+      - fulfilled
+      - canceled
+      - cloned
+      type: string
+      description: |-
+        * `draft` - Draft
+        * `unfulfilled` - Unfulfilled
+        * `partially fulfilled` - Partially fulfilled
+        * `fulfilled` - Fulfilled
+        * `canceled` - Canceled
+        * `cloned` - Cloned
+    OrderTypeEnum:
+      enum:
+      - delivery
+      - pickup
+      - scan_n_go
+      - digital
+      - digital_card_batch
+      - dropp
+      - navision
+      type: string
+      description: |-
+        * `delivery` - Delivery
+        * `pickup` - Pickup
+        * `scan_n_go` - Scan'n Go
+        * `digital` - Digital
+        * `digital_card_batch` - Digital Card Batch
+        * `dropp` - Dropp
+        * `navision` - Navision
+    PaginatedPublicOrderListResponseList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicOrderListResponse'
+    PaginatedPublicProductListListResponseList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicProductListListResponse'
+    PaginatedPublicProductPurchaseStatsListResponseList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicProductPurchaseStatsListResponse'
+    PatchedPublicProductListCreate:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+    PatchedPublicShoppingNote:
+      type: object
+      properties:
+        token:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicShoppingNoteLine'
+    PatchedPublicShoppingNoteLineChangeInput:
+      type: object
+      properties:
+        token:
+          type: string
+          format: uuid
+        text:
+          type: string
+          maxLength: 255
+        quantity:
+          type: integer
+          minimum: 0
+    PatchedPublicShoppingNoteLineTokenInput:
+      type: object
+      properties:
+        token:
+          type: string
+          format: uuid
+    PatchedPublicToggleIgnoredInput:
+      type: object
+      properties:
+        isIgnored:
+          type: boolean
+    PublicCategory:
+      type: object
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 128
+        backgroundImage:
+          type: string
+          format: uri
+          nullable: true
+        icon:
+          type: string
+          format: uri
+          nullable: true
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicCategoryLevel1'
+          readOnly: true
+      required:
+      - children
+      - name
+      - slug
+    PublicCategoryLevel1:
+      type: object
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 128
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicCategoryLevel2'
+          readOnly: true
+      required:
+      - children
+      - name
+      - slug
+    PublicCategoryLevel2:
+      type: object
+      properties:
+        slug:
+          type: string
+          maxLength: 128
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 128
+      required:
+      - name
+      - slug
+    PublicCategoryProductList:
+      type: object
+      properties:
+        name:
+          type: string
+        count:
+          type: integer
+        page:
+          type: integer
+        pageCount:
+          type: integer
+        hasNextPage:
+          type: boolean
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicProduct'
+          readOnly: true
+      required:
+      - count
+      - hasNextPage
+      - name
+      - page
+      - pageCount
+      - products
+    PublicCheckout:
+      type: object
+      properties:
+        token:
+          type: string
+          format: uuid
+          readOnly: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicCheckoutLine'
+          readOnly: true
+        total:
+          type: integer
+          readOnly: true
+        subtotal:
+          type: integer
+          readOnly: true
+        baggingFee:
+          type: integer
+          readOnly: true
+        serviceFee:
+          type: integer
+          readOnly: true
+        shippingFee:
+          type: integer
+          readOnly: true
+        shippingFeeCutoff:
+          type: integer
+          readOnly: true
+      required:
+      - baggingFee
+      - lines
+      - serviceFee
+      - shippingFee
+      - shippingFeeCutoff
+      - subtotal
+      - token
+      - total
+    PublicCheckoutLine:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        quantity:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+        product:
+          allOf:
+          - $ref: '#/components/schemas/PublicProduct'
+          readOnly: true
+        total:
+          type: integer
+          readOnly: true
+        price:
+          type: integer
+          readOnly: true
+        substitution:
+          type: boolean
+      required:
+      - id
+      - price
+      - product
+      - quantity
+      - total
+    PublicLineInput:
+      type: object
+      properties:
+        sku:
+          type: string
+          maxLength: 40
+        quantity:
+          type: integer
+          maximum: 500
+          minimum: 0
+          default: 1
+        substitution:
+          type: boolean
+          description: Whether substitution is allowed if this product is unavailable.
+      required:
+      - sku
+    PublicLinesAddInput:
+      type: object
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicLineInput'
+        replace:
+          type: boolean
+          default: true
+          description: If true, replaces all existing checkout lines. If false, adds
+            to existing lines.
+      required:
+      - lines
+    PublicLinesDeleteInput:
+      type: object
+      properties:
+        lineIds:
+          type: array
+          items:
+            type: integer
+      required:
+      - lineIds
+    PublicLinesLowerQuantityInput:
+      type: object
+      properties:
+        lineIds:
+          type: array
+          items:
+            type: integer
+        quantity:
+          type: integer
+          minimum: 0
+          description: New total quantity for the lines. Must be lower than current
+            quantity. Set to 0 to remove.
+      required:
+      - lineIds
+      - quantity
+    PublicLinesToggleSubstitutionInput:
+      type: object
+      properties:
+        lineIds:
+          type: array
+          items:
+            type: integer
+      required:
+      - lineIds
+    PublicMe:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/PublicMeTypeEnum'
+        name:
+          type: string
+      required:
+      - name
+      - type
+    PublicMeTypeEnum:
+      enum:
+      - user
+      - customer_group
+      type: string
+      description: |-
+        * `user` - user
+        * `customer_group` - customer_group
+    PublicOrder:
+      type: object
+      description: Full order representation with lines for detail/mutation endpoints.
+      properties:
+        token:
+          type: string
+          maxLength: 36
+        created:
+          type: string
+          format: date-time
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/OrderStatusEnum'
+        type:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/OrderTypeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        total:
+          type: integer
+          readOnly: true
+        discount:
+          type: integer
+          readOnly: true
+        deliveryDate:
+          type: string
+          format: date
+          nullable: true
+        allowAlterOrderLines:
+          type: boolean
+          readOnly: true
+          description: Whether the customer can still modify or remove lines from
+            this order.
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicOrderLine'
+          readOnly: true
+      required:
+      - allowAlterOrderLines
+      - created
+      - discount
+      - lines
+      - total
+    PublicOrderLine:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        productName:
+          type: string
+          maxLength: 386
+        sku:
+          type: string
+        quantity:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+        quantityOrdered:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        unitPrice:
+          type: integer
+          readOnly: true
+        substitution:
+          type: boolean
+        substitutionForLineId:
+          type: integer
+          nullable: true
+          readOnly: true
+          description: ID of the original line this line substitutes for, or null.
+        isMutable:
+          type: boolean
+          readOnly: true
+          description: Whether this line can be modified or deleted.
+        isLastChance:
+          type: boolean
+        thumbnail:
+          type: string
+          format: uri
+          readOnly: true
+        total:
+          type: integer
+          readOnly: true
+      required:
+      - id
+      - isMutable
+      - productName
+      - quantity
+      - sku
+      - substitutionForLineId
+      - thumbnail
+      - total
+      - unitPrice
+    PublicOrderListResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicOrderSummary'
+      required:
+      - count
+      - next
+      - previous
+      - results
+    PublicOrderSummary:
+      type: object
+      description: Lightweight order representation for list endpoints.
+      properties:
+        token:
+          type: string
+          maxLength: 36
+        created:
+          type: string
+          format: date-time
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/OrderStatusEnum'
+        type:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/OrderTypeEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        total:
+          type: integer
+          readOnly: true
+        discount:
+          type: integer
+          readOnly: true
+        deliveryDate:
+          type: string
+          format: date
+          nullable: true
+        allowAlterOrderLines:
+          type: boolean
+          readOnly: true
+          description: Whether the customer can still modify or remove lines from
+            this order.
+      required:
+      - allowAlterOrderLines
+      - created
+      - discount
+      - total
+    PublicPaginatedSearchResult:
+      type: object
+      properties:
+        count:
+          type: integer
+        page:
+          type: integer
+        pageCount:
+          type: integer
+        hasNextPage:
+          type: boolean
+        hits:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicSearchHit'
+      required:
+      - count
+      - hasNextPage
+      - hits
+      - page
+      - pageCount
+    PublicProduct:
+      type: object
+      description: Standard product representation used across list/search/category
+        endpoints.
+      properties:
+        sku:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        thumbnail:
+          type: string
+          format: uri
+          readOnly: true
+        price:
+          type: integer
+          readOnly: true
+        discountedPrice:
+          type: integer
+          readOnly: true
+        discountPercent:
+          type: integer
+          readOnly: true
+        onSale:
+          type: boolean
+          readOnly: true
+        priceInfo:
+          type: string
+          nullable: true
+          readOnly: true
+        chargedByWeight:
+          type: boolean
+        pricePerKilo:
+          type: integer
+          nullable: true
+          readOnly: true
+        baseComparisonUnit:
+          type: string
+          nullable: true
+          maxLength: 128
+        temporaryShortage:
+          type: boolean
+          readOnly: true
+      required:
+      - discountPercent
+      - discountedPrice
+      - name
+      - onSale
+      - price
+      - priceInfo
+      - pricePerKilo
+      - sku
+      - temporaryShortage
+      - thumbnail
+    PublicProductDetail:
+      type: object
+      description: Extended product representation with description, full image, and
+        tags.
+      properties:
+        sku:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        thumbnail:
+          type: string
+          format: uri
+          readOnly: true
+        price:
+          type: integer
+          readOnly: true
+        discountedPrice:
+          type: integer
+          readOnly: true
+        discountPercent:
+          type: integer
+          readOnly: true
+        onSale:
+          type: boolean
+          readOnly: true
+        priceInfo:
+          type: string
+          nullable: true
+          readOnly: true
+        chargedByWeight:
+          type: boolean
+        pricePerKilo:
+          type: integer
+          nullable: true
+          readOnly: true
+        baseComparisonUnit:
+          type: string
+          nullable: true
+          maxLength: 128
+        temporaryShortage:
+          type: boolean
+          readOnly: true
+        description:
+          type: string
+        image:
+          type: string
+          format: uri
+          readOnly: true
+        qtyPerBaseCompUnit:
+          type: number
+          format: double
+          nullable: true
+        countryOfOrigin:
+          type: string
+          nullable: true
+          maxLength: 128
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicProductTag'
+          readOnly: true
+      required:
+      - discountPercent
+      - discountedPrice
+      - image
+      - name
+      - onSale
+      - price
+      - priceInfo
+      - pricePerKilo
+      - sku
+      - tags
+      - temporaryShortage
+      - thumbnail
+    PublicProductList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        token:
+          type: string
+          format: uuid
+          readOnly: true
+        description:
+          type: string
+      required:
+      - id
+      - name
+      - token
+    PublicProductListAddItemInput:
+      type: object
+      properties:
+        sku:
+          type: string
+          maxLength: 40
+        quantity:
+          type: integer
+          minimum: 0
+      required:
+      - quantity
+      - sku
+    PublicProductListCreate:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+      required:
+      - name
+    PublicProductListDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        token:
+          type: string
+          format: uuid
+          readOnly: true
+        description:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicProductListItem'
+          readOnly: true
+      required:
+      - id
+      - items
+      - name
+      - token
+    PublicProductListItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        quantity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        product:
+          allOf:
+          - $ref: '#/components/schemas/PublicProduct'
+          readOnly: true
+      required:
+      - id
+      - product
+      - quantity
+    PublicProductListListResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicProductListWithCount'
+      required:
+      - count
+      - next
+      - previous
+      - results
+    PublicProductListWithCount:
+      type: object
+      description: Used in list endpoint where has_products is annotated on the queryset.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        token:
+          type: string
+          format: uuid
+          readOnly: true
+        description:
+          type: string
+        hasProducts:
+          type: boolean
+          readOnly: true
+      required:
+      - hasProducts
+      - id
+      - name
+      - token
+    PublicProductPurchaseStats:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        product:
+          allOf:
+          - $ref: '#/components/schemas/PublicProduct'
+          readOnly: true
+        purchaseCount:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        quantityPurchased:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        averagePurchaseQuantity:
+          type: number
+          format: double
+          nullable: true
+        lastPurchaseQuantity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        averagePurchaseIntervalDays:
+          type: number
+          format: double
+          nullable: true
+        firstPurchaseDate:
+          type: string
+          format: date
+          nullable: true
+        lastPurchaseDate:
+          type: string
+          format: date
+          nullable: true
+        isIgnored:
+          type: boolean
+      required:
+      - id
+      - product
+    PublicProductPurchaseStatsListResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicProductPurchaseStats'
+      required:
+      - count
+      - next
+      - previous
+      - results
+    PublicProductTag:
+      type: object
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+      required:
+      - name
+      - slug
+    PublicSearchDetail:
+      type: object
+      properties:
+        discountedPrice:
+          type: integer
+          readOnly: true
+        discountPercent:
+          type: integer
+          readOnly: true
+        onSale:
+          type: boolean
+          readOnly: true
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicProductTag'
+          readOnly: true
+      required:
+      - discountPercent
+      - discountedPrice
+      - onSale
+      - tags
+    PublicSearchHit:
+      type: object
+      properties:
+        sku:
+          type: string
+        name:
+          type: string
+        price:
+          type: integer
+          readOnly: true
+        thumbnail:
+          type: string
+          nullable: true
+          readOnly: true
+        temporaryShortage:
+          type: boolean
+          readOnly: true
+        priceInfo:
+          type: string
+          nullable: true
+          readOnly: true
+        chargedByWeight:
+          type: boolean
+          readOnly: true
+        pricePerKilo:
+          type: integer
+          nullable: true
+          readOnly: true
+        baseComparisonUnit:
+          type: string
+          nullable: true
+          readOnly: true
+        detail:
+          allOf:
+          - $ref: '#/components/schemas/PublicSearchDetail'
+          nullable: true
+          readOnly: true
+      required:
+      - baseComparisonUnit
+      - chargedByWeight
+      - detail
+      - name
+      - price
+      - priceInfo
+      - pricePerKilo
+      - sku
+      - temporaryShortage
+      - thumbnail
+    PublicSearchInput:
+      type: object
+      properties:
+        query:
+          type: string
+          maxLength: 64
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+        sortBy:
+          type: string
+          description: Sort field (e.g. 'price', 'name').
+        withDetail:
+          type: boolean
+          default: false
+          description: If true, each hit includes discounted price, discount percent,
+            and tags. Slower.
+      required:
+      - query
+    PublicShoppingNote:
+      type: object
+      properties:
+        token:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicShoppingNoteLine'
+      required:
+      - lines
+      - name
+      - token
+    PublicShoppingNoteEligibilityError:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    PublicShoppingNoteLine:
+      type: object
+      properties:
+        token:
+          type: string
+          format: uuid
+          readOnly: true
+        text:
+          type: string
+          nullable: true
+          maxLength: 255
+        quantity:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        product:
+          allOf:
+          - $ref: '#/components/schemas/PublicShoppingNoteProduct'
+          nullable: true
+        placement:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        isCompleted:
+          type: boolean
+      required:
+      - token
+    PublicShoppingNoteLineArchived:
+      type: object
+      properties:
+        token:
+          type: string
+          format: uuid
+          readOnly: true
+        text:
+          type: string
+          readOnly: true
+        completedCount:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - text
+      - token
+    PublicShoppingNoteLineInput:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Freeform text for the line. Either text or sku must be provided.
+          maxLength: 3000
+        sku:
+          type: string
+          description: Product SKU to link. Either sku or text must be provided.
+          maxLength: 32
+        quantity:
+          type: integer
+          minimum: 0
+          default: 0
+    PublicShoppingNoteProduct:
+      type: object
+      properties:
+        sku:
+          type: string
+          nullable: true
+          maxLength: 32
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+        thumbnail:
+          type: string
+          readOnly: true
+      required:
+      - name
+      - thumbnail
+  securitySchemes:
+    AccessTokenAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: 'Use prefix: AccessToken <token>'
