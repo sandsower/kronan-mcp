@@ -1,6 +1,7 @@
 {
   "name": "kronan-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "mcpName": "io.github.sandsower/kronan-mcp",
   "description": "MCP server for the Krónan grocery store API (Iceland)",
   "type": "module",
   "main": "dist/index.js",

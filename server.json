@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.sandsower/kronan-mcp",
+  "description": "MCP server for the Krónan grocery store API (Iceland)",
+  "repository": {
+    "url": "https://github.com/sandsower/kronan-mcp",
+    "source": "github"
+  },
+  "version": "1.0.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "kronan-mcp",
+      "version": "1.0.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "Krónan API access token (act_ prefix). Created via Audkenni login in customer group settings.",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true,
+          "name": "KRONAN_ACCESS_TOKEN"
+        }
+      ]
+    }
+  ]
+}

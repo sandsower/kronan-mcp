@@ -3,3 +3,5 @@ dist/
 *.tgz
 .env
 .claude/settings.local.json
+.mcpregistry_github_token
+.mcpregistry_registry_token
