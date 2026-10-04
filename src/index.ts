@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { KronanClient, KronanApiError } from "./client.js";
+import { result } from "./result.js";
 
 const server = new McpServer({
   name: "kronan",
@@ -27,10 +28,6 @@ function getClient(): KronanClient {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
-
-function result(data: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
-}
 
 function errorResult(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true as const };
